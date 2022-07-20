@@ -76,15 +76,12 @@ namespace logprime
 	}
 
 	int Logger::prepare_file()
-	{
-		
-
+	{		
 		if (!file_path.exists())
 		{
 			file.open(file_path.path().string(), std::fstream::out);
 			file.close();
 		}
-
 
 		file.open(file_path.path().string(), std::fstream::in | std::fstream::out | std::fstream::app);
 		if (!file.is_open())

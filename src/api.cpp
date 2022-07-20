@@ -23,14 +23,17 @@ namespace logprime
 			log(ERROR, msg);
 	}
 
+
 	void Logger::setBarierLevel(loglevel level)
-	{
+	{//TODO test setBarierLevel()
+		std::lock_guard<std::mutex> lock_guard(mutex);
 		barier_level = level;
 	}
 
 
 	int Logger::setLogfilePath(std::string path)
 	{
+		std::lock_guard<std::mutex> lock_guard(mutex);
 		file_path.assign(path);
 		if (prepare_file() == errors::FILE_NOT_OPENED)
 		{
@@ -42,6 +45,7 @@ namespace logprime
 
 	int Logger::setCfgfilePath(std::string path)
 	{
+		std::lock_guard<std::mutex> lock_guard(mutex);
 		cfg_path.assign(path);
 		if (load_cfg() == errors::FILE_NOT_OPENED)
 		{
@@ -54,6 +58,7 @@ namespace logprime
 
 	int Logger::setLogDir(std::string path)
 	{
+		std::lock_guard<std::mutex> lock_guard(mutex);
 		logs_dir.assign(path);
 
 		if (std::filesystem::exists(logs_dir))
