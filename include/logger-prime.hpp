@@ -12,25 +12,18 @@ namespace logprime
 	class Logger
 	{
 	private:
-		enum errors
-		{
-			FILE_NOT_OPENED = 1,
-
-		};
-
 		struct logtype
 		{
-			const char* level; //DEBUG, INFO, WARN, ERROR, etc.
+			const char* name; /*DEBUG, INFO, WARN, ERROR, etc. with priorities,
+			0 has maximum priority, larger values have lower priority*/
+			loglevel level;
 			const char* format; //specific text format in control characters for console output
-			const int priority; // 0 has maximum priority, larger values have lower priority 
 		};
 
-
-
-		const logtype ERROR{ "ERROR", fmt::REDTEXT, 0 };
-		const logtype WARN{ "WARN", fmt::YELLOWTEXT, 1 };
-		const logtype INFO{ "INFO", fmt::GREENTEXT, 2 };
-		const logtype DEBUG{ "DEBUG", fmt::BLUETEXT, 3 };
+		const logtype ERROR{ "ERROR", loglevel::ERROR, fmt::REDTEXT };
+		const logtype INFO{ "INFO", loglevel::INFO, fmt::GREENTEXT };
+		const logtype WARN{ "WARN", loglevel::WARN, fmt::YELLOWTEXT };
+		const logtype DEBUG{ "DEBUG", loglevel::DEBUG, fmt::BLUETEXT };
 
 		std::bitset<8> flags{ 0 };
 
@@ -38,13 +31,15 @@ namespace logprime
 		std::fstream file;
 		std::fstream cfg_file;
 
-		std::filesystem::path logs_dir{ "logs" };
-		std::filesystem::directory_entry file_path{ logs_dir.string() + "/default_log.txt"};
-		
+		std::filesystem::path logs_dir{ "./logs" };
+		std::filesystem::directory_entry file_path{ logs_dir.string() + "/log.txt" };
+		std::filesystem::directory_entry cfg_path{ "./cfg/logger-prime.cfg" };
 
-		int file_lines{ 0 }; //number of lines in current using file
+		loglevel barier_level{ loglevel::DEBUG };
+
+		size_t file_lines{ 0 }; //number of lines in current using file
 		int file_postfix{ 0 }; //postfix for marking files
-		int MAX_FILE_SIZE{ 20*8*1024 }; //size in bytes
+		int MAX_FILE_SIZE{ 20 * 8 * 1024 }; //size in bytes
 		int MAX_FILE_LINES{ 8 }; //size in lines
 		int MAX_FILE_QUANTITY{ 20 };
 
@@ -52,29 +47,14 @@ namespace logprime
 		explicit Logger(int bitset) :
 			flags(bitset << 1)//because std::bitset counts from 0, but enum flagset starts from 1
 		{
-			if (flags.test(FILE_OUTPUT))
-			{				
-				if (load_cfg() == FILE_NOT_OPENED)
-				{
-					console << fmt::REDBGR << "Cannot open config file.\n" << fmt::DEFAULTTEXT;
-					console << fmt::REDBGR << "Failed to construct Logger object.\n" << fmt::DEFAULTTEXT;
-					return;
-				}
-				
-				if (prepare_file() == FILE_NOT_OPENED)
-				{
-					console << fmt::REDBGR << "Cannot find last log file which is expected.\n" << fmt::DEFAULTTEXT;
-					console << fmt::REDBGR << "Failed to construct Logger object.\n" << fmt::DEFAULTTEXT;
-					return;
-				}
-
-			}
+			if (bitset >= flagset::LAST)
+				console << fmt::REDBGR << "Incorrect initial value\n" << fmt::DEFAULTTEXT;
+			flags = 0;
 		}
 
 		~Logger()
 		{
-
-			if (save_cfg() == FILE_NOT_OPENED)
+			if (save_cfg() == errors::FILE_NOT_OPENED)
 			{
 				console << fmt::REDBGR << "Cannot open config file.\n" << fmt::DEFAULTTEXT;
 				console << fmt::REDBGR << "Failed to construct Logger object.\n" << fmt::DEFAULTTEXT;
@@ -83,59 +63,52 @@ namespace logprime
 			file.close();
 		}
 
-		void debug(const char* msg)
-		{
-			log(DEBUG, msg);
+		void debug(const char* msg);
+		void info(const char* msg);
+		void warn(const char* msg);
+		void error(const char* msg);
 
-		}
-		void info(const char* msg)
-		{
-			log(INFO, msg);
-		}
-		void warn(const char* msg)
-		{
-			log(WARN, msg);
-		}
-		void error(const char* msg)
-		{
-			log(ERROR, msg);
-		}
+		int setLogfilePath(std::string path);
+		int setCfgfilePath(std::string path);
+		int setLogDir(std::string path);
 
-
+		void setBarierLevel(loglevel level);
 
 	private:
+		void log(const logtype& type, const char* msg)
+		{
+			if (_log(type, msg) == errors::FILE_NOT_OPENED)
+				console << fmt::REDBGR << "File is not open. Cannot write to it.\n" << fmt::DEFAULTTEXT;
+		}
+
 		int _log(const logtype& type, const char* msg)
 		{
 			auto strtime = get_date_time("%X");
 
-			if (flags.test(CONSOLE_OUTPUT))
-			{				
+			if (flags.test(flagset::CONSOLE_OUTPUT))
+			{
 				console << "[ " << strtime << " ] ";
-				console << "[ " << type.format << type.level << fmt::DEFAULTTEXT << " ] ";
+				console << "[ " << type.format << type.name << fmt::DEFAULTTEXT << " ] ";
 				console << msg;
 				console << '\n';
 			}
 
-			if (flags.test(FILE_OUTPUT))
+			if (flags.test(flagset::FILE_OUTPUT))
 			{
 				if (file_lines >= MAX_FILE_LINES)
 					create_new_file();
 
 				file << "[ " << strtime << " ] ";
-				file << "[ " << type.level << " ] ";
+				file << "[ " << type.name << " ] ";
 				file << msg;
 				file << '\n';
 				++file_lines;
 			}
 
-			return 0;
+			return errors::SUCCESS;
 		}
 
-		void log(const logtype& type, const char* msg)
-		{
-			if (_log(type, msg) == FILE_NOT_OPENED)
-				console << fmt::REDBGR << "File is not open. Cannot write to it.\n" << fmt::DEFAULTTEXT;
-		}
+		
 
 		std::string get_date_time(const char* format)
 		{
@@ -150,9 +123,9 @@ namespace logprime
 		}
 
 		int prepare_file();
-		int get_file_size();
-		int count_file_lines();
-		int count_file_quantity();
+		size_t get_file_size();
+		size_t count_file_lines();
+		size_t count_file_quantity();
 		void create_new_file();
 		void remove_excess_files();
 		void check_actual_file();

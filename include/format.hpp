@@ -2,6 +2,27 @@
 
 namespace logprime
 {
+	enum class loglevel
+	{
+		ERROR,
+		WARN,
+		INFO,
+		DEBUG,
+	};
+
+	namespace errors
+	{
+		enum errors
+		{
+			SUCCESS,
+			FILE_NOT_EXISTS,
+			FILE_NOT_OPENED,
+			DIRECTORY_NOT_CREATED,
+			IS_NOT_DIRECTORY,
+
+		};
+	}
+
 	namespace fmt
 	{
 		const char BLUETEXT[]{ "\033[36;1m" };
@@ -12,10 +33,15 @@ namespace logprime
 		const char DEFAULTTEXT[]{ "\033[40;37;1m" };
 	}
 
-	enum flagset
+	namespace flagset
 	{
-		CONSOLE_OUTPUT = 1,
-		FILE_OUTPUT = 2,
+		enum flagset
+		{
+			CONSOLE_OUTPUT = 1,
+			FILE_OUTPUT = 2,
 
-	};//last bit with decimal value 128 cannot be used while using <<1 in Logger constructor
+
+			LAST = 128
+		};//last bit with decimal value 128 cannot be used while using <<1 in Logger constructor
+	}
 }
