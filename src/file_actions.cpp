@@ -8,23 +8,28 @@ namespace logprime
 		if (!cfg_file.is_open())
 			return errors::FILE_NOT_OPENED;
 
-		std::string line, key, value;
-		while (std::getline(ss, line))
+		if (ss.peek() == -1)
+		{			
+			cfg_file << "current_path=" << file_path.path().string() << '\n';
+		}
+		else
 		{
-			if (line.at(0) == '#')
-				cfg_file << line << '\n';
-
-			auto pos = line.find('=');
-			if (pos == line.npos)
+			std::string line, key, value;
+			while (std::getline(ss, line))
 			{
-				return errors::CORRUPTED_CFG_FILE;
+				if (line.at(0) == '#')
+					cfg_file << line << '\n';
+
+				auto pos = line.find('=');
+				if (pos == line.npos)
+					return errors::CORRUPTED_CFG_FILE;
+
+				key = line.substr(0, pos);
+				cfg_file << key << '=';
+
+				if (key == "current_path")
+					cfg_file << file_path.path().string() << '\n';
 			}
-
-			key = line.substr(0, pos);
-			cfg_file << key << '=';
-
-			if (key == "current_path")
-				cfg_file << file_path.path().string() << '\n';
 		}
 
 		cfg_file.close();
@@ -37,11 +42,17 @@ namespace logprime
 		{
 			cfg_file.open(cfg_path.path().string(), std::fstream::out);
 			cfg_file.close();
-			return errors::SUCCESS;
 		}
 
 		if (std::filesystem::is_empty(cfg_path))
+		{
+			std::pair<std::chrono::system_clock::rep, std::filesystem::path> pair(0, file_path.path().string());
+			for (auto& iter : std::filesystem::directory_iterator(logs_dir))
+				if (iter.last_write_time().time_since_epoch().count() > pair.first)
+					pair.second = iter.path();
+			file_path.assign(pair.second);
 			return errors::SUCCESS;
+		}
 
 		cfg_file.open(cfg_path.path().string(), std::fstream::in);
 		if (!cfg_file.is_open())
@@ -74,7 +85,7 @@ namespace logprime
 
 	size_t Logger::get_file_size()
 	{
-		//TODO test get_file_size()
+		
 		return std::filesystem::file_size(file_path);
 	}
 
@@ -110,7 +121,7 @@ namespace logprime
 		file_lines = 0;
 		if (prepare_file() == errors::FILE_NOT_OPENED)
 		{
-			console << fmt::REDBGR << "Cannot find last log file which is expected.\n" << fmt::DEFAULTTEXT;
+			console << fmt::REDBGR << "Cannot create log file.\n" << fmt::DEFAULTTEXT;
 			return;
 		}
 	}
@@ -170,6 +181,4 @@ namespace logprime
 		++file_postfix;
 		return filename;
 	}
-
-
 }

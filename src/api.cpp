@@ -5,61 +5,97 @@ namespace logprime
 	void Logger::debug(const char* msg)
 	{
 		if (DEBUG.level <= barier_level)
-			log(DEBUG, msg);
+			log(DEBUG, msg, nullptr, nullptr, NULL);
 	}
+
 	void Logger::info(const char* msg)
 	{
 		if (INFO.level <= barier_level)
-			log(INFO, msg);
+			log(INFO, msg, nullptr, nullptr, NULL);
 	}
 	void Logger::warn(const char* msg)
 	{
 		if (WARN.level <= barier_level)
-			log(WARN, msg);
+			log(WARN, msg, nullptr, nullptr, NULL);
 	}
 	void Logger::error(const char* msg)
 	{
 		if (ERROR.level <= barier_level)
-			log(ERROR, msg);
+			log(ERROR, msg, nullptr, nullptr, NULL);
+	}
+
+
+	void Logger::debug(const char* msg, const char* funcname, const char* filename, const long line)
+	{
+		if (DEBUG.level <= barier_level)
+			log(DEBUG, msg, funcname, filename, line);
+	}
+
+	void Logger::info(const char* msg, const char* funcname, const char* filename, const long line)
+	{
+		if (INFO.level <= barier_level)
+			log(INFO, msg, funcname, filename, line);
+	}
+
+	void Logger::warn(const char* msg, const char* funcname, const char* filename, const long line)
+	{
+		if (WARN.level <= barier_level)
+			log(WARN, msg, funcname, filename, line);
+	}
+
+	void Logger::error(const char* msg, const char* funcname, const char* filename, const long line)
+	{
+		if (ERROR.level <= barier_level)
+			log(ERROR, msg, funcname, filename, line);
 	}
 
 
 	void Logger::setBarierLevel(loglevel level)
 	{
-		std::lock_guard<std::mutex> lock_guard(mutex);
 		barier_level = level;
 	}
 
-
-	int Logger::setLogfilePath(std::string path)
-	{//TODO test setLogfilePath()
-		std::lock_guard<std::mutex> lock_guard(mutex);
-		file_path.assign(path);
-		if (prepare_file() == errors::FILE_NOT_OPENED)
-		{
-			console << fmt::REDBGR << "Cannot open specified log file.\n" << fmt::DEFAULTTEXT;
-			return errors::FILE_NOT_OPENED;
-		}
-		return errors::SUCCESS;
-	}
-
 	int Logger::setCfgfilePath(std::string path)
-	{//TODO test setCfgfilePath()
-		std::lock_guard<std::mutex> lock_guard(mutex);
+	{
 		cfg_path.assign(path);
-		if (load_cfg() == errors::FILE_NOT_OPENED)
+
+		if (!cfg_path.exists())
 		{
-			console << fmt::REDBGR << "Cannot open specified config file.\n" << fmt::DEFAULTTEXT;
+			if (std::filesystem::exists(cfg_path.path().parent_path()))
+			{
+				if (!is_directory(status(cfg_path.path().parent_path())))
+					return errors::IS_NOT_DIRECTORY;
+			}
+			else
+				if (!std::filesystem::create_directory(cfg_path.path().parent_path()))
+					return errors::DIRECTORY_NOT_CREATED;
+		}
+
+
+		switch (load_cfg())
+		{
+		case errors::FILE_NOT_OPENED:
+		{
+			console << fmt::REDBGR << "Cannot open config file.\n" << fmt::DEFAULTTEXT;
 			return errors::FILE_NOT_OPENED;
 		}
+		case errors::CORRUPTED_CFG_FILE:
+		{
+			console << fmt::REDBGR << "Config file is corrupted.\n" << fmt::DEFAULTTEXT;
+			return errors::CORRUPTED_CFG_FILE;
+		}
+		default:
+			break;
+		}
+
 		return errors::SUCCESS;
 	}
 
 
 	int Logger::setLogDir(std::string path)
-	{//TODO test setLogDir()
-		std::lock_guard<std::mutex> lock_guard(mutex);
+	{
 		logs_dir.assign(path);
+		file_path.assign(logs_dir/default_filename);
 
 		if (std::filesystem::exists(logs_dir))
 		{
@@ -69,13 +105,14 @@ namespace logprime
 		else
 			if (!std::filesystem::create_directory(logs_dir))
 				return errors::DIRECTORY_NOT_CREATED;
-		
+
+		prepare_file();
 		return errors::SUCCESS;
 	}
 
-	int Logger::setMaxFileSize(int size)
+	int Logger::setMaxFileSize(int size_in_bytes)
 	{
-		MAX_FILE_SIZE = size;
+		MAX_FILE_SIZE = size_in_bytes;
 		return errors::SUCCESS;
 	}
 
@@ -91,4 +128,20 @@ namespace logprime
 		return errors::SUCCESS;
 	}
 
+
+	void Logger::setFlags(std::bitset<8> bitset)
+	{
+		std::lock_guard<std::mutex> lock_guard(mutex);
+		flags |= bitset;
+	}
+
+	void Logger::unsetFlags(std::bitset<8> bitset)
+	{
+		std::lock_guard<std::mutex> lock_guard(mutex);
+		auto temp = flags;
+		flags ^= bitset;
+		flags &= temp;
+	}
+
 }
+

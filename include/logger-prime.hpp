@@ -8,7 +8,7 @@
 #include <bitset>
 #include <mutex>
 #include <map>
-#include <functional>
+
 
 namespace logprime
 {
@@ -50,7 +50,7 @@ namespace logprime
 		{
 			CONSOLE_OUTPUT = 1,
 			FILE_OUTPUT = 2,
-
+			DETAILED_OUTPUT = 4,
 
 			LAST = 128
 		};//last bit with decimal value 128 cannot be used while using <<1 in Logger constructor
@@ -73,7 +73,7 @@ namespace logprime
 
 		const logtype ERROR{ "ERROR", loglevel::ERROR, fmt::REDTEXT };
 		const logtype INFO{ "INFO", loglevel::INFO, fmt::GREENTEXT };
-		const logtype WARN{ "WARN", loglevel::WARN, fmt::YELLOWTEXT };
+		const logtype WARN{ "WARNING", loglevel::WARN, fmt::YELLOWTEXT };
 		const logtype DEBUG{ "DEBUG", loglevel::DEBUG, fmt::BLUETEXT };
 
 		std::bitset<8> flags{ 0 };
@@ -83,45 +83,31 @@ namespace logprime
 		std::fstream cfg_file;
 
 		std::stringstream ss;
-		std::filesystem::path logs_dir{ "./logs" };
-		std::filesystem::directory_entry file_path{ logs_dir.string() + "/log.txt" };
-		std::filesystem::directory_entry cfg_path{ "./cfg/logger-prime.cfg" };
+		std::filesystem::path logs_dir{ "./" };
+		const char* default_filename{ "log.txt" };
+		const char* default_cfg_path{ "./logger-prime.cfg" };
+		std::filesystem::directory_entry file_path{ "" };
+		std::filesystem::directory_entry cfg_path{ "" };
 
 		loglevel barier_level{ loglevel::DEBUG };
 
 		int file_postfix{ 0 }; //postfix for marking files
 		size_t file_lines{ 0 }; //number of lines in current using file
-		size_t MAX_FILE_SIZE{ 20 * 8 * 1024 }; //size in bytes (20kb)
+		size_t MAX_FILE_SIZE{ 100 * 1024 }; //size in bytes (100kb)
 		size_t MAX_FILE_LINES{ 2000 }; //size in lines
 		size_t MAX_FILE_QUANTITY{ 20 };
 
 		std::mutex mutex;
 
 	public:
-		explicit Logger(int bitset) :
-			flags(bitset << 1)//because std::bitset counts from 0, but enum flagset starts from 1
+		explicit Logger(std::bitset<8> bitset) :
+			flags(bitset)
 		{
-			if (bitset >= flagset::LAST)
+			if (bitset.test(7))
 			{
 				console << fmt::REDBGR << "Incorrect initial value\n" << fmt::DEFAULTTEXT;
 				flags = 0;
 			}
-			else
-				switch (load_cfg())
-				{
-				case errors::FILE_NOT_OPENED:
-				{
-					console << fmt::REDBGR << "Cannot open config file.\n" << fmt::DEFAULTTEXT;
-					return;
-				}
-				case errors::CORRUPTED_CFG_FILE:
-				{
-					console << fmt::REDBGR << "Config file is corrupted.\n" << fmt::DEFAULTTEXT;
-					return;
-				}
-				}
-
-			prepare_file();
 		}
 
 		~Logger()
@@ -134,55 +120,76 @@ namespace logprime
 			file.close();
 		}
 
+
+		// api section
+
 		void debug(const char* msg);
 		void info(const char* msg);
 		void warn(const char* msg);
 		void error(const char* msg);
 
-		int setLogfilePath(std::string path);
+		void debug(const char* msg, const char* funcname, const char* filename, const long line);
+		void info(const char* msg, const char* funcname, const char* filename, const long line);
+		void warn(const char* msg, const char* funcname, const char* filename, const long line);
+		void error(const char* msg, const char* funcname, const char* filename, const long line);
+
 		int setCfgfilePath(std::string path);
 		int setLogDir(std::string path);
-		int setMaxFileSize(int size);
+		int setMaxFileSize(int size_in_bytes);
 		int setMaxFileLines(int lines);
 		int setMaxFileQuantity(int quantity);
 
 		void setBarierLevel(loglevel level);
+		void setFlags(std::bitset<8> bitset);
+		void unsetFlags(std::bitset<8> bitset);
 
 	private:
-		void log(const logtype& type, const char* msg)
+		void log(const logtype& type, const char* msg, const char* funcname, const char* filename, const long line)
 		{
-			if (_log(type, msg) == errors::FILE_NOT_OPENED)
+			if (_log(type, msg, funcname, filename, line) == errors::FILE_NOT_OPENED)
+			{
 				console << fmt::REDBGR << "File is not open. Cannot write to it.\n" << fmt::DEFAULTTEXT;
+			}
 		}
-		int _log(const logtype& type, const char* msg)
+		int _log(const logtype& type, const char* msg, const char* funcname, const char* filename, const long line)
 		{
-			auto strtime = get_date_time("%x %X");
+			auto strtime = get_date_time("%d-%m-%Y %X");
 
-			if (flags.test(flagset::CONSOLE_OUTPUT))
+			if (flags.test(degree_of_two(flagset::CONSOLE_OUTPUT)))
 			{
 				std::lock_guard<std::mutex> lock_guard(mutex);
 				console << "[ " << strtime << " ] " <<
 					"[ " << type.format << type.name << fmt::DEFAULTTEXT << " ] " <<
-					msg << '\n';
+					msg;
+
+
+				if (flags.test(degree_of_two(flagset::DETAILED_OUTPUT)) && funcname != nullptr)
+					console << fmt::GREENTEXT << "   from function '" << funcname
+					<< "' in file " << filename << ':' << line << fmt::DEFAULTTEXT;
+
+				console << '\n';
 			}
 
-			if (flags.test(flagset::FILE_OUTPUT))
+			if (flags.test(degree_of_two(flagset::FILE_OUTPUT)))
 			{
 				std::lock_guard<std::mutex> lock_guard(mutex);
-				if (file_lines >= MAX_FILE_LINES)
+				if (file_lines >= MAX_FILE_LINES || get_file_size() >= MAX_FILE_SIZE)
 					create_new_file();
 
 				file << "[ " << strtime << " ] " <<
 					"[ " << type.name << " ] " <<
-					msg << '\n';
+					msg;
+
+				if (flags.test(degree_of_two(flagset::DETAILED_OUTPUT)) && funcname != nullptr)
+					file << "   from function '" << funcname
+					<< "' in file " << filename << ':' << line;
+				file << '\n';
 
 				++file_lines;
 			}
 
 			return errors::SUCCESS;
 		}
-
-
 
 		std::string get_date_time(const char* format)
 		{
@@ -196,6 +203,15 @@ namespace logprime
 			return strtime;
 		}
 
+		int degree_of_two(int value)
+		{
+			for (int i{ 0 }; i <= 7; ++i)
+				if (value & static_cast<int>(std::pow(2, i)))
+					return i;
+		}
+
+		//file_actions section
+
 		int prepare_file();
 		size_t get_file_size();
 		size_t count_file_lines();
@@ -207,6 +223,15 @@ namespace logprime
 		int save_cfg();
 
 		std::string generate_filename();
+
+
 	};
 
 }
+
+#ifdef TRACE
+#define info(msg) info(msg, __func__, __FILE__, __LINE__)
+#define debug(msg) debug(msg, __func__, __FILE__, __LINE__)
+#define warn(msg) warn(msg, __func__, __FILE__, __LINE__)
+#define error(msg) error(msg, __func__, __FILE__, __LINE__)
+#endif
