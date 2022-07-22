@@ -4,8 +4,11 @@
 #include<thread>
 #include<ctime>
 #include <string>
+#include <sstream>
 #include <bitset>
 #include <mutex>
+#include <map>
+#include <functional>
 
 namespace logprime
 {
@@ -26,6 +29,7 @@ namespace logprime
 			FILE_NOT_OPENED,
 			DIRECTORY_NOT_CREATED,
 			IS_NOT_DIRECTORY,
+			CORRUPTED_CFG_FILE,
 
 		};
 	}
@@ -78,20 +82,20 @@ namespace logprime
 		std::fstream file;
 		std::fstream cfg_file;
 
+		std::stringstream ss;
 		std::filesystem::path logs_dir{ "./logs" };
 		std::filesystem::directory_entry file_path{ logs_dir.string() + "/log.txt" };
 		std::filesystem::directory_entry cfg_path{ "./cfg/logger-prime.cfg" };
 
 		loglevel barier_level{ loglevel::DEBUG };
 
-		size_t file_lines{ 0 }; //number of lines in current using file
 		int file_postfix{ 0 }; //postfix for marking files
-		int MAX_FILE_SIZE{ 20 * 8 * 1024 }; //size in bytes
-		int MAX_FILE_LINES{ 2000 }; //size in lines
-		int MAX_FILE_QUANTITY{ 20 };
+		size_t file_lines{ 0 }; //number of lines in current using file
+		size_t MAX_FILE_SIZE{ 20 * 8 * 1024 }; //size in bytes (20kb)
+		size_t MAX_FILE_LINES{ 2000 }; //size in lines
+		size_t MAX_FILE_QUANTITY{ 20 };
 
 		std::mutex mutex;
-
 
 	public:
 		explicit Logger(int bitset) :
@@ -103,10 +107,21 @@ namespace logprime
 				flags = 0;
 			}
 			else
-				if (load_cfg() == errors::FILE_NOT_OPENED)
+				switch (load_cfg())
+				{
+				case errors::FILE_NOT_OPENED:
 				{
 					console << fmt::REDBGR << "Cannot open config file.\n" << fmt::DEFAULTTEXT;
+					return;
 				}
+				case errors::CORRUPTED_CFG_FILE:
+				{
+					console << fmt::REDBGR << "Config file is corrupted.\n" << fmt::DEFAULTTEXT;
+					return;
+				}
+				}
+
+			prepare_file();
 		}
 
 		~Logger()
@@ -127,6 +142,9 @@ namespace logprime
 		int setLogfilePath(std::string path);
 		int setCfgfilePath(std::string path);
 		int setLogDir(std::string path);
+		int setMaxFileSize(int size);
+		int setMaxFileLines(int lines);
+		int setMaxFileQuantity(int quantity);
 
 		void setBarierLevel(loglevel level);
 
@@ -136,11 +154,9 @@ namespace logprime
 			if (_log(type, msg) == errors::FILE_NOT_OPENED)
 				console << fmt::REDBGR << "File is not open. Cannot write to it.\n" << fmt::DEFAULTTEXT;
 		}
-
-
 		int _log(const logtype& type, const char* msg)
 		{
-			auto strtime = get_date_time("%X");
+			auto strtime = get_date_time("%x %X");
 
 			if (flags.test(flagset::CONSOLE_OUTPUT))
 			{
@@ -186,14 +202,11 @@ namespace logprime
 		size_t count_file_quantity();
 		void create_new_file();
 		void remove_excess_files();
-		void check_actual_file();
 
 		int load_cfg();
 		int save_cfg();
 
 		std::string generate_filename();
-
-
 	};
 
 }

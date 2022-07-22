@@ -4,30 +4,78 @@ namespace logprime
 {
 	int Logger::save_cfg()
 	{
-		cfg_file.open(cfg_path.path().string(), std::fstream::out | std::ios::trunc);
+		cfg_file.open(cfg_path.path().string(), std::fstream::out | std::fstream::trunc);
 		if (!cfg_file.is_open())
 			return errors::FILE_NOT_OPENED;
-		cfg_file << file_path.path().string();
+
+		std::string line, key, value;
+		while (std::getline(ss, line))
+		{
+			if (line.at(0) == '#')
+				cfg_file << line << '\n';
+
+			auto pos = line.find('=');
+			if (pos == line.npos)
+			{
+				return errors::CORRUPTED_CFG_FILE;
+			}
+
+			key = line.substr(0, pos);
+			cfg_file << key << '=';
+
+			if (key == "current_path")
+				cfg_file << file_path.path().string() << '\n';
+		}
+
 		cfg_file.close();
 		return errors::SUCCESS;
 	}
 
 	int Logger::load_cfg()
 	{
+		if (!cfg_path.exists())
+		{
+			cfg_file.open(cfg_path.path().string(), std::fstream::out);
+			cfg_file.close();
+			return errors::SUCCESS;
+		}
+
+		if (std::filesystem::is_empty(cfg_path))
+			return errors::SUCCESS;
+
 		cfg_file.open(cfg_path.path().string(), std::fstream::in);
 		if (!cfg_file.is_open())
 			return errors::FILE_NOT_OPENED;
-		std::string str;
-		std::getline(cfg_file, str);
-		file_path.assign(str);
+
+		ss << cfg_file.rdbuf();
 		cfg_file.close();
+
+		std::string line, key, value;
+
+		while (std::getline(ss, line))
+		{
+			if (line == "" || line.at(0) == '#')
+				continue;
+
+			auto pos = line.find('=');
+			if (pos == line.npos)
+			{
+				return errors::CORRUPTED_CFG_FILE;
+			}
+
+			key = line.substr(0, pos);
+			value = line.substr(pos + 1, line.size());
+			if (key == "current_path")
+				file_path.assign(value);
+		}
+
 		return errors::SUCCESS;
 	}
 
 	size_t Logger::get_file_size()
 	{
 		//TODO test get_file_size()
-		return std::filesystem::file_size(file_path);		
+		return std::filesystem::file_size(file_path);
 	}
 
 	size_t Logger::count_file_lines()
@@ -47,12 +95,16 @@ namespace logprime
 
 	size_t Logger::count_file_quantity()
 	{
-		//TODO test count_file_quantity
 		return std::distance(std::filesystem::directory_iterator(logs_dir), std::filesystem::directory_iterator());
 	}
 
 	void Logger::create_new_file()
 	{
+		if (count_file_quantity() >= MAX_FILE_QUANTITY)
+		{
+			remove_excess_files();
+		}
+
 		file.close();
 		file_path.assign(generate_filename());
 		file_lines = 0;
@@ -65,18 +117,21 @@ namespace logprime
 
 	void Logger::remove_excess_files()
 	{
-		//TODO remove_excess_files()
-	}
+		std::multimap<std::chrono::system_clock::rep, std::filesystem::path> paths;
 
-	void Logger::check_actual_file()
-	{
-		//TODO check_actual_file()
-		for (const auto& entry : std::filesystem::directory_iterator(logs_dir.c_str()))
-			std::cout << entry.path() << std::endl;
+		for (auto& iter : std::filesystem::directory_iterator(logs_dir))
+			paths.insert({ iter.last_write_time().time_since_epoch().count(), iter.path() });
+
+		auto first = paths.begin();
+		while (count_file_quantity() >= MAX_FILE_QUANTITY)
+		{
+			++first;
+			std::filesystem::remove(first->second);
+		}
 	}
 
 	int Logger::prepare_file()
-	{		
+	{
 		if (!file_path.exists())
 		{
 			file.open(file_path.path().string(), std::fstream::out);
@@ -115,4 +170,6 @@ namespace logprime
 		++file_postfix;
 		return filename;
 	}
+
+
 }
