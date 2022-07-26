@@ -51,9 +51,7 @@ namespace logprime
 			CONSOLE_OUTPUT = 1,
 			FILE_OUTPUT = 2,
 			DETAILED_OUTPUT = 4,
-
-			LAST = 128
-		};//last bit with decimal value 128 cannot be used while using <<1 in Logger constructor
+		};
 	}
 }
 
@@ -103,11 +101,6 @@ namespace logprime
 		explicit Logger(std::bitset<8> bitset) :
 			flags(bitset)
 		{
-			if (bitset.test(7))
-			{
-				console << fmt::REDBGR << "Incorrect initial value\n" << fmt::DEFAULTTEXT;
-				flags = 0;
-			}
 		}
 
 		~Logger()
