@@ -13,11 +13,13 @@ namespace logprime
 		if (INFO.level <= barier_level)
 			log(INFO, msg, nullptr, nullptr, NULL);
 	}
+
 	void Logger::warn(const char* msg)
 	{
 		if (WARN.level <= barier_level)
 			log(WARN, msg, nullptr, nullptr, NULL);
 	}
+
 	void Logger::error(const char* msg)
 	{
 		if (ERROR.level <= barier_level)
@@ -95,7 +97,7 @@ namespace logprime
 	int Logger::setLogDir(std::string path)
 	{
 		logs_dir.assign(path);
-		file_path.assign(logs_dir/default_filename);
+		file_path.assign(logs_dir.string() + '/' + file_path.path().filename().string());
 
 		if (std::filesystem::exists(logs_dir))
 		{
@@ -106,7 +108,10 @@ namespace logprime
 			if (!std::filesystem::create_directory(logs_dir))
 				return errors::DIRECTORY_NOT_CREATED;
 
-		prepare_file();
+		if (prepare_file() == errors::FILE_NOT_OPENED)
+			console << fmt::REDBGR << "File with specified path '" <<
+			file_path.path().string() << "' cannot be opened.\n" << fmt::DEFAULTTEXT;
+
 		return errors::SUCCESS;
 	}
 
@@ -127,7 +132,6 @@ namespace logprime
 		MAX_FILE_QUANTITY = quantity;
 		return errors::SUCCESS;
 	}
-
 
 	void Logger::setFlags(std::bitset<8> bitset)
 	{

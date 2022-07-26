@@ -86,14 +86,14 @@ namespace logprime
 		std::filesystem::path logs_dir{ "./" };
 		const char* default_filename{ "log.txt" };
 		const char* default_cfg_path{ "./logger-prime.cfg" };
-		std::filesystem::directory_entry file_path{ "" };
-		std::filesystem::directory_entry cfg_path{ "" };
+		std::filesystem::directory_entry file_path{ "./log.txt" };
+		std::filesystem::directory_entry cfg_path{ "./logger-prime.cfg" };
 
 		loglevel barier_level{ loglevel::DEBUG };
 
 		int file_postfix{ 0 }; //postfix for marking files
 		size_t file_lines{ 0 }; //number of lines in current using file
-		size_t MAX_FILE_SIZE{ 100 * 1024 }; //size in bytes (100kb)
+		size_t MAX_FILE_SIZE{ 1024 * 1024 }; //size in bytes (1Mb)
 		size_t MAX_FILE_LINES{ 2000 }; //size in lines
 		size_t MAX_FILE_QUANTITY{ 20 };
 
@@ -112,16 +112,16 @@ namespace logprime
 
 		~Logger()
 		{
+			file.close();
+
 			if (save_cfg() == errors::FILE_NOT_OPENED)
 			{
 				console << fmt::REDBGR << "Cannot open config file to write changes.\n" << fmt::DEFAULTTEXT;
 			}
-
-			file.close();
 		}
 
 
-		// api section
+		// API section
 
 		void debug(const char* msg);
 		void info(const char* msg);
@@ -164,7 +164,7 @@ namespace logprime
 
 
 				if (flags.test(degree_of_two(flagset::DETAILED_OUTPUT)) && funcname != nullptr)
-					console << fmt::GREENTEXT << "   from function '" << funcname
+					console << fmt::GREENTEXT << "   #from function '" << funcname
 					<< "' in file " << filename << ':' << line << fmt::DEFAULTTEXT;
 
 				console << '\n';
@@ -178,10 +178,11 @@ namespace logprime
 
 				file << "[ " << strtime << " ] " <<
 					"[ " << type.name << " ] " <<
-					msg;
+					msg;				
+					
 
 				if (flags.test(degree_of_two(flagset::DETAILED_OUTPUT)) && funcname != nullptr)
-					file << "   from function '" << funcname
+					file << "   #from function '" << funcname
 					<< "' in file " << filename << ':' << line;
 				file << '\n';
 
@@ -223,7 +224,6 @@ namespace logprime
 		int save_cfg();
 
 		std::string generate_filename();
-
 
 	};
 
